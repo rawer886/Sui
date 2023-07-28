@@ -98,7 +98,9 @@ dependencies {
 
 def outDir = file("$rootDir/out")
 
+// 在项目构建完成后执行
 afterEvaluate {
+    // 判断是否是从IDE中调用
     def isIDE = properties.containsKey('android.injected.invoked.from.ide')
     if (isIDE) {
         println("Invoked from IDE")
@@ -106,31 +108,44 @@ afterEvaluate {
         println("Invoked from command line")
     }
 
+    // 遍历所有的应用程序变体
     android.applicationVariants.all { variant ->
-        def variantCapped = variant.name.capitalize()
-        def variantLowered = variant.name.toLowerCase()
-        def buildTypeCapped = variant.getBuildType().getName().capitalize()
-        def buildTypeLowered = variant.getBuildType().getName().toLowerCase()
-        def flavorCapped = variantCapped.replaceFirst(buildTypeCapped, "")
-        def flavorLowered = variantLowered.replaceFirst(buildTypeLowered, "")
+        // 获取变体名称、构建类型和Flavor名称
+        def variantCapped = variant.name.capitalize()//ZygiskRelease
+        def variantLowered = variant.name.toLowerCase()//zygiskrelease
+        def buildTypeCapped = variant.getBuildType().getName().capitalize()//Release
+        def buildTypeLowered = variant.getBuildType().getName().toLowerCase()//release
+        def flavorCapped = variantCapped.replaceFirst(buildTypeCapped, "")//Zygisk
+        def flavorLowered = variantLowered.replaceFirst(buildTypeLowered, "")//zygisk
 
+        //添加一行日志,输出上面变量的值
+        println("variantCapped: $variantCapped variantLowered: $variantLowered buildTypeCapped: $buildTypeCapped buildTypeLowered: $buildTypeLowered flavorCapped: $flavorCapped flavorLowered: $flavorLowered")
+
+        // 定义Magisk模块的名称和目录
         def zipName = "sui-${flavorLowered}-${moduleVersion}-${buildTypeLowered}.zip"
         def magiskDir = file("$outDir/${flavorLowered}_${buildTypeLowered}")
 
+        // 将preBuild任务依赖于assemble任务,先执行 :ui:assemble${buildTypeCapped} 然后再执行
         tasks.getByName("pre${variantCapped}Build").dependsOn(":ui:assemble${buildTypeCapped}")
 
+        // 定义prepareMagiskFiles任务，用于准备Magisk模块文件
         task("prepareMagiskFiles${variantCapped}", type: Sync) {
             dependsOn("assemble$variantCapped")
 
+            // 定义Magisk模块的模板路径
             def templatePath = "$rootDir/template/magisk_module"
 
+            // 将文件从模板路径复制到Magisk模块目录
             into magiskDir
             from(templatePath) {
+                // 排除riru.sh、customize.sh、post-fs-data.sh和module.prop文件
+                //会在下面几个复制命令中单独处理,因为有变量需要做替换处理
                 exclude 'riru.sh', 'customize.sh', 'post-fs-data.sh', 'module.prop'
             }
             if (flavorLowered == 'riru') {
                 from(templatePath) {
                     include 'riru.sh'
+                    //替换 riru.sh 中的变量
                     filter(ReplaceTokens.class, tokens: [
                             "RIRU_MODULE_LIB_NAME"             : moduleLibraryName,
                             "RIRU_MODULE_API_VERSION"          : moduleRiruApiVersion.toString(),
@@ -189,6 +204,7 @@ afterEvaluate {
                 rename { 'sui.apk' }
             }
             doLast {
+                // 为每个文件生成SHA-256校验和
                 fileTree("$magiskDir").visit { f ->
                     if (f.directory) return
                     if (f.file.name == '.gitattributes') return
@@ -202,30 +218,38 @@ afterEvaluate {
             }
         }
 
-        task("zip${variantCapped}", type: Zip) {
+        // 定义zip任务，用于将Magisk模块打包成zip文件
+        task("zip${variantCapped}", type: Zip) {//Zip是Gradle内置的任务, 用于打包zip文件
+            //输出一行日志
             dependsOn("prepareMagiskFiles${variantCapped}")
             from magiskDir
-            archiveFileName = zipName
-            destinationDirectory = outDir
+            archiveFileName = zipName // zip文件名
+            destinationDirectory = outDir // 输出目录
         }
 
-        task("push${variantCapped}", type: Exec) {
+        // 定义push任务，用于将Magisk模块推送到设备上
+        task("push${variantCapped}", type: Exec) {//Exec是Gradle内置的任务, 用于执行命令
+            //输出一行日志
             dependsOn("assemble${variantCapped}")
             workingDir outDir
             commandLine android.adbExecutable, "push", zipName, "/data/local/tmp/"
         }
 
+        // 定义flash任务，用于在设备上安装Magisk模块
         task("flash${variantCapped}", type: Exec) {
             dependsOn("push${variantCapped}")
             commandLine android.adbExecutable, "shell", "su", "-c",
                     "magisk --install-module /data/local/tmp/${zipName}"
         }
 
+        // 定义flashAndReboot任务，用于在设备上安装Magisk模块并重启设备
         task("flashAndReboot${variantCapped}", type: Exec) {
             dependsOn("flash${variantCapped}")
             commandLine android.adbExecutable, "shell", "reboot"
         }
 
+        // 将 zip${variantCapped} 任务放到 assemble 任务与之后执行
+        //variant.assembleProvider.get()是一个Gradle任务的声明，它表示要执行的任务。具体来说，它表示要执行当前变体的构建任务，例如debug或release
         variant.assembleProvider.get().finalizedBy("zip${variantCapped}")
     }
 }
