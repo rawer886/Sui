@@ -29,23 +29,25 @@
  * argv[1]: path of the module, such as /data/adb/modules/zygisk-sui
  */
 static int sui_main(int argc, char **argv) {
-    LOGI("Sui starter begin: %s", argv[1]);
+    LOGI("Sui starter begin argv: [%s, %s], pid: %d", argv[1], argv[2], getpid());
 
-    if (daemon(false, false) != 0) {
+    if (daemon(false, false) != 0) {//转换为守护进程. 第一个参数: 表示不更改当前工作目录. 第二个参数: 不关闭任何文件描述符
         PLOGE("daemon");
         return EXIT_FAILURE;
     }
 
     wait_for_zygote();
 
+    // 检查 /data/adb/sui 目录是否存在, 不存在则创建
     if (access("/data/adb/sui", F_OK) != 0) {
         mkdir("/data/adb/sui", 0600);
     }
     chmod("/data/adb/sui", 0600);
-    chown("/data/adb/sui", 0, 0);
+    chown("/data/adb/sui", 0, 0);//修改文件所有者为 root
 
     auto root_path = argv[1];
 
+    //设置 dex_path 为 /data/adb/sui/sui.dex
     char dex_path[PATH_MAX]{0};
     strcpy(dex_path, root_path);
     strcat(dex_path, "/sui.dex");
