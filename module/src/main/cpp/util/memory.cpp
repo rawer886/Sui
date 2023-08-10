@@ -36,7 +36,11 @@ static void Init() {
 
     init = true;
 }
-
+/**
+   * Ashmem 是一种匿名共享内存机制，可以用于进程间通信。
+   * 要使用 Ashmem，需要在代码中引用 libcutils.so 库，并调用其中的 ashmem_create_region 函数来创建共享内存区域。
+   * 在这里对应的 Init 函数
+*/
 int CreateSharedMem(const char *name, size_t size) {
     Init();
     if (!ashmem_create_region) return -1;
@@ -49,6 +53,7 @@ int CreateSharedMem(const char *name, size_t size) {
     return ret;
 }
 
+//设置共享内存区域的保护模式
 int SetSharedMemProt(int fd, int prot) {
     Init();
     if (!ashmem_create_region) return 0;

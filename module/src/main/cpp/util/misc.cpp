@@ -125,16 +125,27 @@ int read_full(int fd, void *out, size_t len) {
     return 0;
 }
 
+/**
+ * 将指定数量的数据写入文件描述符，确保所有数据都被写入。
+ * 
+ * @param fd 文件描述符。
+ * @param buf 要写入的数据的指针。
+ * @param count 要写入的数据的大小。
+ * @return 如果所有数据都被写入，则返回 0；否则返回 -1。
+ */
 int write_full(int fd, const void *buf, size_t count) {
     while (count > 0) {
+        // 调用 write 系统调用写入数据。可能存在写入不完全的情况。
         ssize_t size = write(fd, buf, count < SSIZE_MAX ? count : SSIZE_MAX);
         if (size == -1) {
+            // 如果写入被中断，则重新尝试写入。
             if (errno == EINTR)
                 continue;
             else
                 return -1;
         }
 
+        // 将指针指向下一个要写入的位置。
         buf = (const void *) ((uintptr_t) buf + size);
         count -= size;
     }
